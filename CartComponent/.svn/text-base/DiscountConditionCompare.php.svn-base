@@ -1,0 +1,432 @@
+<?php
+
+namespace JesseHanson\MobileCartBundle\CartComponent;
+
+use JesseHanson\MobileCartBundle\CartComponent\Cart;
+use JesseHanson\MobileCartBundle\CartComponent\Item;
+use JesseHanson\MobileCartBundle\CartComponent\Shipment;
+use JesseHanson\MobileCartBundle\CartComponent\Discount;
+use JesseHanson\MobileCartBundle\CartComponent\DiscountCondition;
+
+class DiscountConditionCompare
+{
+	/**
+	 *
+	 */
+	protected $_op;
+
+	/**
+	 *
+	 */
+	protected $_isNot;
+
+	/**
+	 *
+	 */
+	protected $_sourceEntityType;
+
+	//DEV NOTE: use either (left op right) OR (op conditions)
+	// but cannot use both operations at the same time
+	// examples:
+	//         OR conditions means return true if any conditions are true in $_conditions
+	//         AND conditions means return true if all conditions are true in $_conditions
+	//         left AND right means return true if left and right are both true
+	//         left OR right means return true if either left or right are true
+
+	/**
+	 *
+	 */
+	protected $_conditions;
+
+	/**
+	 *
+	 */
+	protected $_leftCondition;
+
+	/**
+	 *
+	 */
+	protected $_rightCondition;
+
+	/**
+	 *
+	 */
+	static $prefix = 'compare-';
+
+	static getKey($id)
+	{
+		return self::$prefix . $id;
+	}
+
+	public function __construct()
+	{
+
+	}
+
+	public function __toString()
+	{
+		return $this->toJson();
+	}
+
+	/**
+	 *
+	 */
+	public function toJson()
+	{
+		return json_encode($this->toArray());
+	}
+
+	/**
+	 *
+	 */
+	public function toArray()
+	{
+		return array(
+			'op'     => $this->getOp(),
+			'is_not' => $this->getIsNot(),
+			'left'   => $this->getLeftCondition()->toArray(),
+			'right'  => $this->getRightCondition()->toArray(),
+			'conditions' => $this->getConditionsAsArray(),
+		);
+	}
+
+	/**
+	 *
+	 */
+	public function importJson($json, $reset = true)
+	{
+		if ($reset) {
+			$this->reset();
+		}
+
+		$data = @ (array) json_decode($json);
+		$op = isset($data['op']) ? $data['op'] : '';
+		$isNot = (bool) isset($data['is_not']) ? $data['is_not'] : false;
+
+		$left = null;
+		$right = null;
+		$leftData = isset($data['left']) ? $data['left'] : null;
+		$rightData = isset($data['right']) ? $data['right'] : null;
+		$conditions = isset($data['conditions']) ? $data['conditions'] : array();
+
+		if (is_array($leftData)) {
+			if (isset($leftData['op'])) {
+
+				//we have DiscountConditionCompare data
+				$left = new DiscountConditionCompare();
+				$left->importJson(json_encode($leftData));
+
+			} else {
+				//we have DiscountCondition data
+				$left = new DiscountCondition();
+				$left->importJson(json_encode($leftData));
+			}
+		}
+
+		if (is_array($right)) {
+			if (isset($right['op'])) {
+
+				//we have DiscountConditionCompare data
+				$right = new DiscountConditionCompare();
+				$right->importJson(json_encode($rightData));
+
+			} else {
+				//we have DiscountCondition data
+				$right = new DiscountCondition();
+				$right->importJson(json_encode($rightData));
+			}
+		}
+
+		if (is_array($conditions) && count($conditions) > 0) {
+			foreach($conditions as $key => $data) {
+				if (is_int(strpos($key, DiscountConditionCompare::$prefix))) {
+
+					//we have DiscountConditionCompare data
+					$compare = new DiscountConditionCompare();
+					$compare->importJson(json_encode($data));
+					$this->setCondition($key, $compare);
+					
+				} else if (is_int(strpos($key, DiscountCondition::$prefix))) {
+
+					//we have DiscountCondition data
+					$condition = new DiscountCondition();
+					$condition->importJson(json_encode($data));
+					$this->setCondition($key, $condition);
+				}
+			}
+		}
+
+		$this->_op = $op;
+		$this->_isNot = $isNot;
+		$this->_leftCondition = $left;
+		$this->_rightCondition = $right;
+		$this->_conditions = $conditions;
+
+		return $this;
+	}
+
+	/**
+	 *
+	 */
+	public function getOp()
+	{
+		return $this->_op;
+	}
+
+	/**
+	 *
+	 */
+	public function setOp($op)
+	{
+		$this->_op = $op;
+		return $this;
+	}
+
+	/**
+	 *
+	 */
+	public function getIsNot()
+	{
+		return $this->_isNot;
+	}
+
+	/**
+	 *
+	 */
+	public function setIsNot($isNot)
+	{
+		$this->_isNot = $isNot;
+		return $this;
+	}
+
+	/**
+	 *
+	 */
+	public function getSourceEntityType()
+	{
+		return $this->_sourceEntityType;
+	}
+
+	/**
+	 *
+	 */
+	public function setSourceEntityType($type)
+	{
+		$this->_sourceEntityType = $type;
+		return $this;
+	}
+
+	/**
+	 *
+	 */
+	public function getLeftCondition()
+	{
+		return $this->_leftCondition;
+	}
+
+	/**
+	 * Mutator
+	 *
+	 * @param DiscountCondition|DiscountConditionCompare $condition
+	 */
+	public function setLeftCondition($condition)
+	{
+		if ($condition->getSourceEntityType() != $this->getSourceEntityType()) {
+			return false;
+		}
+
+		$this->_leftCondition = $condition;
+		return $this;
+	}
+
+	/**
+	 *
+	 */
+	public function getRightCondition()
+	{
+		return $this->_rightCondition;
+	}
+
+	/**
+	 * Mutator
+	 *
+	 * @param DiscountCondition|DiscountConditionCompare
+	 */
+	public function setRightCondition($condition)
+	{
+		if ($condition->getSourceEntityType() != $this->getSourceEntityType()) {
+			return false;
+		}
+
+		$this->_rightCondition = $condition;
+		return $this;
+	}
+
+	/**
+	 * Mutator
+	 *
+	 * @param DiscountCondition|DiscountConditionCompare
+	 */
+	public function setCondition($key, $condition)
+	{
+		if ($condition->getSourceEntityType() != $this->getSourceEntityType()) {
+			return false;
+		}
+
+		$this->_conditions[$key] = $condition;
+		return $this;
+	}
+
+	/**
+	 *
+	 */
+	public function getCondition($key)
+	{
+		return isset($this->_conditions[$key]) ? $this->_conditions[$key] : null;
+	}
+
+	/**
+	 *
+	 */
+	public function unsetCondition ($key)
+	{
+		if (isset($this->_conditions[$key])) {
+			unset($this->_conditions[$key])
+		}
+		return $this;
+	}
+
+	/**
+	 *
+	 */
+	public function getConditions()
+	{
+		return $this->_conditions;
+	}
+
+	/**
+	 *
+	 */
+	public function getConditionsAsArray($obj = null)
+	{
+		$conditions = array();
+
+		if (is_null($object)) {
+			$object = $this;
+		}
+
+		if (count($object->getConditions()) > 0) {
+			//get linear tree
+			foreach($object->getConditions() as $key => $tmpObject) {
+				if (is_int(strpos($key, DiscountCondition::$prefix))) {
+					//straight to array
+					$conditions[$key] = $tmpObject->toArray();
+				} else if (is_int(strpos($key, DiscountConditionCompare::$prefix))) {
+					$conditions[$key] = $this->getConditionsAsArray($tmpObject);
+				}
+			}
+		} else if (is_object($object->getLeftCondition()) && is_object($object->getRightCondition())) {
+			//get left-right tree
+			$left = $object->getLeftCondition();
+			$right = $object->getRightCondition();
+
+			$tmpLeftData = $left->toArray();
+			$tmpRightData = $right->toArray();
+
+			$conditions['left'] = isset($tmpLeftData['op']) ? $this->getConditionsAsArray($left) : $left->toArray();
+			$conditions['right'] = isset($tmpRightData['op']) ? $this->getConditionsAsArray($right) : $right->toArray();
+		}
+
+		return $conditions;
+	}
+
+	/**
+     *
+     */
+    public function isValid($object)
+    {
+
+    	$left = $this->getLeftCondition();
+        $right = $this->getRightCondition();
+        $isNot = $this->getIsNot();
+
+        switch($this->getOp()) {
+            case 'and':
+                if (count($this->getConditions())) {
+
+                    foreach($this->getConditions() as $condition) {
+                        if (!$object->isValidCondition($condition)) {
+                            return ($isNot) ? true : false;
+                        }
+                    }
+
+                    return ($isNot) ? false : true;
+                } else {
+
+                    if ($left instanceof DiscountCondition && 
+                        $right instanceof DiscountCondition) {
+                        
+                        $result = $object->isValidCondition($left) && $object->isValidCondition($right);
+                    	return ($isNot) ? !$result : $result;
+                    } else if ($left instanceof DiscountConditionCompare && 
+                               $right instanceof DiscountCondition) {
+
+                        $result = $this->isValid($left, $object) && $object->isValidCondition($right);
+                        return ($isNot) ? !$result : $result;
+                    } else if ($left instanceof DiscountCondition && 
+                               $right instanceof DiscountConditionCompare) {
+
+                        $result = $object->isValidCondition($left) && $this->isValid($right, $object);
+                        return ($isNot) ? !$result : $result;
+                    } else if ($left instanceof DiscountConditionCompare && 
+                               $right instanceof DiscountConditionCompare) {
+
+                        $result = $this->isValid($left, $object) && $this->isValid($right, $object);
+                        return ($isNot) ? !$result : $result;
+                    }
+                }
+                break;
+            case 'or':
+            	if (count($this->getConditions())) {
+
+                    foreach($this->getConditions() as $condition) {
+                        if ($object->isValidCondition($condition)) {
+                            return ($isNot) ? false : true;
+                        }
+                    }
+
+                    return ($isNot) ? true : false;
+                } else {
+
+                    if ($left instanceof DiscountCondition && 
+                        $right instanceof DiscountCondition) {
+                        
+                        $result = $object->isValidCondition($left) || $object->isValidCondition($right);
+                    	return ($isNot) ? !$result : $result;
+                    } else if ($left instanceof DiscountConditionCompare && 
+                               $right instanceof DiscountCondition) {
+
+                        $result = $this->isValid($left, $object) || $object->isValidCondition($right);
+                        return ($isNot) ? !$result : $result;
+                    } else if ($left instanceof DiscountCondition && 
+                               $right instanceof DiscountConditionCompare) {
+
+                        $result = $object->isValidCondition($left) || $this->isValid($right, $object);
+                        return ($isNot) ? !$result : $result;
+                    } else if ($left instanceof DiscountConditionCompare && 
+                               $right instanceof DiscountConditionCompare) {
+
+                        $result = $this->isValid($left, $object) || $this->isValid($right, $object);
+                        return ($isNot) ? !$result : $result;
+                    }
+                }
+
+                break;
+            default:
+                //no-op
+                break;
+        }
+        
+        return ($isNot) ? true : false;
+    }
+}
